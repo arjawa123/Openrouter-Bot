@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: telegram-openrouter-bot
+    env: python
+    region: singapore
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: PYTHON_VERSION
+        value: 3.11.4
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_WEBHOOK_SECRET
+        sync: false
+      - key: TELEGRAM_WEBHOOK_URL
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_MODEL_DEFAULT
+        value: openai/gpt-3.5-turbo
+      - key: OPENROUTER_MODEL_CODE
+        value: anthropic/claude-3-haiku
+      - key: OPENROUTER_MODEL_RESEARCH
+        value: perplexity/sonar-small-chat
+      - key: OPENROUTER_SITE_URL
+        value: https://your-site.com
+      - key: OPENROUTER_APP_NAME
+        value: TelegramOpenRouterBot
+      - key: DATABASE_URL
+        fromDatabase:
+          name: botdb
+          property: connectionString
