@@ -3,6 +3,7 @@ from aiogram.types import Message
 from aiogram.filters import Command, CommandStart, CommandObject
 
 from app.db.session import async_session
+from app.db import crud
 from app.services import personalization_service, memory_service, todo_service, notes_service, snippet_service, digest_service
 from app.bot.formatter import send_long_message
 
@@ -46,8 +47,56 @@ async def cmd_help(message: Message):
 async def cmd_profile(message: Message):
     async with async_session() as db:
         user = await personalization_service.get_or_create_profile(db, message.from_user)
-        text = f"*Your Profile*\nName: {user.preferred_name or user.first_name}\nMode: {user.default_mode}\nLanguage: {user.language}"
+        
+        # Get memories to show what the assistant knows
+        memories = await crud.get_user_memories(db, user.id, limit=5)
+        memory_text = "\n".join([f"• {m.content}" for m in memories]) if memories else "None yet."
+        
+        text = (
+            f"👤 *Your Profile*\n\n"
+            f"Name: `{user.preferred_name or user.first_name}`\n"
+            f"Mode: `{user.default_mode}`\n"
+            f"Language: `{user.language}`\n"
+            f"Style: `{user.style}`\n\n"
+            f"🧠 *What I've learned about you:*\n{memory_text}\n\n"
+            f"Use /settings to update your preferences."
+        )
         await message.answer(text, parse_mode="Markdown")
+
+@router.message(Command("settings"))
+async def cmd_settings(message: Message, command: CommandObject):
+    if not command.args:
+        text = (
+            f"⚙️ *Settings Usage:*\n"
+            f"/settings name <name> - Update your preferred name\n"
+            f"/settings lang <language> - Update preferred language\n"
+            f"/settings style <style> - Update assistant style (e.g., formal, friendly)\n"
+        )
+        await message.answer(text, parse_mode="Markdown")
+        return
+        
+    parts = command.args.split(maxsplit=1)
+    key = parts[0].lower()
+    val = parts[1] if len(parts) > 1 else None
+    
+    if not val:
+        await message.answer("Please provide a value. Example: `/settings name Alex`")
+        return
+        
+    async with async_session() as db:
+        user = await personalization_service.get_or_create_profile(db, message.from_user)
+        
+        if key == "name":
+            await personalization_service.update_profile(db, user.id, preferred_name=val)
+        elif key == "lang":
+            await personalization_service.update_profile(db, user.id, language=val)
+        elif key == "style":
+            await personalization_service.update_profile(db, user.id, style=val)
+        else:
+            await message.answer("Invalid setting key.")
+            return
+            
+        await message.answer(f"✅ Setting `{key}` updated to `{val}`.")
 
 @router.message(Command("mode"))
 async def cmd_mode(message: Message, command: CommandObject):

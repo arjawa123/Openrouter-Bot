@@ -1,146 +1,110 @@
-# Telegram OpenRouter Bot
+# Telegram OpenRouter Bot - AI Personal Assistant Agent
 
-A production-ready Telegram bot powered by OpenRouter AI, built with Python, FastAPI, aiogram, and SQLAlchemy. Designed for local development on Termux and seamless deployment to Render.
+A production-ready, highly modular Telegram AI Assistant powered by multiple LLM providers (OpenRouter & Groq). Built with **Python 3.11+**, **FastAPI**, **Aiogram 3.x**, and **SQLAlchemy**.
 
-## Features
+This bot is designed to be more than just a chatbot; it is a **Personal Assistant Agent** capable of reasoning, proactive memory management, and productivity automation.
 
-- **AI Chat:** General chat, coding assistance, research, and planning modes using various models via OpenRouter.
-- **Web Scraping:** Send a URL and the bot will fetch, extract, and summarize its content.
-- **Persistent Memory:** The bot remembers facts about you (`/remember`, `/forget`, `/memory`).
-- **Productivity Tools:** Notes (`/note`, `/notes`), Todos (`/todo`), and Snippets (`/snippet`).
-- **Daily Digest:** A quick summary of your profile, todos, and notes (`/digest`).
+## 🚀 Key Features
 
-## Project Structure
+- **🧠 Agentic Orchestration:** Uses an intent-detection layer to automatically route user requests to specialized services (Chat, Tasks, Notes, Research, Memory).
+- **🛡️ Multi-Provider LLM with Fallback:** Uses **OpenRouter** as the primary engine with automatic failover to **Groq** (using Mixtral/Llama3) for high availability and speed.
+- **⏰ Smart Reminders:** Automatically extracts due dates from natural language (e.g., "Remind me to call Mom tomorrow at 10am") and sends proactive notifications via a background worker.
+- **📈 Intelligence Memory (Fact Extraction):** Automatically learns and remembers facts about the user from conversations to provide a deeply personalized experience.
+- **🌐 Web Research:** Intelligent URL scraping and summarization that integrates directly into the assistant's reasoning context.
+- **📓 Productivity Suite:** Integrated Todo list, Notes, and Code Snippet management with natural language interaction.
+- **🌅 Narrative Daily Digest:** Generates a warm, AI-written morning summary of your pending tasks, recent notes, and personalized reminders.
+
+## 🛠️ Tech Stack
+
+- **Framework:** FastAPI (Web API) & Aiogram (Telegram Bot)
+- **Database:** PostgreSQL with SQLAlchemy (Async) & Alembic (Migrations)
+- **LLM Gateway:** OpenRouter (Primary) & Groq (Fallback)
+- **Logging:** Loguru for structured, beautiful logs
+- **Deployment:** Optimized for Render (Blueprint support)
+- **Local Dev:** Fully compatible with Termux (Android)
+
+## 📁 Project Structure
 
 ```
-telegram-openrouter-bot/
-├── app/                  # Main application code
-│   ├── api/              # FastAPI endpoints (webhook, health)
-│   ├── bot/              # Telegram bot handlers and commands
-│   ├── db/               # SQLAlchemy models and CRUD operations
-│   ├── prompts/          # System prompts for different AI modes
-│   ├── schemas/          # Pydantic models for data validation
-│   ├── services/         # Core business logic (AI, scraping, memory)
-│   ├── utils/            # Helper functions
-│   ├── config.py         # Environment variables configuration
-│   ├── logging_config.py # Loguru setup
-│   └── main.py           # FastAPI application entry point
-├── migrations/           # Alembic database migrations
-├── .env.example          # Example environment variables
-├── alembic.ini           # Alembic configuration
-├── render.yaml           # Render deployment configuration
-├── requirements.txt      # Python dependencies
-└── README.md             # This file
+app/
+├── api/              # Webhook and Health endpoints
+├── bot/              # Telegram handlers, commands, and formatters
+├── db/               # Models, CRUD, and session management
+├── services/         # Core Logic
+│   ├── llm/          # Multi-provider LLM abstraction & fallback logic
+│   ├── assistant/    # Agent reasoning and context assembly
+│   ├── memory/       # Fact extraction and long-term memory
+│   └── productivity/ # Todos, Notes, Reminders, and Scraper
+├── prompts/          # Dynamic system prompt templates
+├── config.py         # Pydantic-based settings
+└── main.py           # Application entry point & background workers
 ```
 
 ---
 
-## Termux Local Development Setup
+## ⚙️ Setup & Installation
 
-If you are developing this on an Android device using Termux, follow these steps:
+### 1. Prerequisites
+- Python 3.11+
+- PostgreSQL
+- Telegram Bot Token ([@BotFather](https://t.me/BotFather))
+- API Keys: [OpenRouter](https://openrouter.ai/) and [Groq](https://console.groq.com/)
 
-### 1. Install Basic Dependencies
-Open Termux and run:
+### 2. Local Setup (Termux / Desktop)
 ```bash
-pkg update && pkg upgrade
-pkg install python python-pip postgresql rust libffi openssl
-```
+# Clone and enter directory
+git clone <repo-url>
+cd telegram-openrouter-bot
 
-### 2. Setup Virtual Environment
-```bash
+# Setup virtual environment
 python -m venv venv
 source venv/bin/activate
-```
 
-### 3. Install Requirements
-```bash
+# Install dependencies
 pip install -r requirements.txt
-```
-*Troubleshooting:* If `asyncpg` or `cryptography` fails to build, ensure `rust` and `libffi` are installed via `pkg install`. Sometimes `pip install wheel` helps before installing requirements.
 
-### 4. Setup Local PostgreSQL Database
-In Termux, start the PostgreSQL server:
-```bash
-initdb ~/pgdata
-pg_ctl -D ~/pgdata start
-```
-Create a user and database:
-```bash
-createuser user
-createdb botdb
-```
-
-### 5. Configure Environment Variables
-Copy the example env file:
-```bash
+# Configure Environment
 cp .env.example .env
+# Edit .env with your keys and DATABASE_URL
 ```
-Edit `.env` and fill in your details:
-- Get a Telegram Bot Token from [@BotFather](https://t.me/BotFather)
-- Get an OpenRouter API Key from [OpenRouter](https://openrouter.ai/keys)
-- Set `DATABASE_URL=postgresql+asyncpg://user@localhost/botdb` (adjust if you set a password)
 
-### 6. Run Migrations
-Generate and apply database migrations:
+### 3. Database Migrations
+Always run migrations after updating the code:
 ```bash
-alembic revision --autogenerate -m "Initial migration"
+alembic revision --autogenerate -m "update_to_agent_v2"
 alembic upgrade head
 ```
 
-### 7. Run Local Server
+### 4. Running the Bot
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### 8. Expose Local Webhook (ngrok / cloudflared)
-Since Telegram needs a public URL for webhooks, use `cloudflared` (recommended for Termux):
-```bash
-pkg install cloudflared
-cloudflared tunnel --url http://localhost:8000
-```
-Copy the generated `https://...trycloudflare.com` URL. Update your `.env` file:
-```
-TELEGRAM_WEBHOOK_URL=https://your-tunnel-url.trycloudflare.com
-APP_ENV=production # Required to enable webhook setting in main.py
-```
-Restart the Uvicorn server.
+---
+
+## 🤖 Available Commands
+
+- `/start` - Initialize your personalized profile.
+- `/help` - Show advanced command guide.
+- `/profile` - See what the assistant has learned about you.
+- `/settings` - Interactively update your name, language, or style.
+- `/mode <mode>` - Manually switch between Assistant, Coder, Researcher, or Planner.
+- `/todo add <text>` - Add tasks with natural language dates.
+- `/digest` - Get your personalized AI-written daily summary.
+- `/memory` - View your long-term memories.
+
+**Pro-tip:** You don't always need commands! Just talk to the bot. 
+*Example: "I need to buy milk tomorrow morning" will automatically create a todo with a reminder.*
 
 ---
 
-## Render Deployment
+## ☁️ Deployment
 
-This project includes a `render.yaml` file for easy deployment using Render's Blueprint feature.
-
-### Prerequisites
-1. Push this code to a GitHub/GitLab repository.
-2. Create an account on [Render](https://render.com).
-
-### Deployment Steps
-1. In Render dashboard, go to **Blueprints** -> **New Blueprint Instance**.
-2. Connect your Git repository.
-3. Render will parse `render.yaml` and create a Web Service and optionally a PostgreSQL database (if defined, otherwise create a managed Postgres DB manually and link it).
-4. **Environment Variables:** Go to the Environment settings of your new Web Service in Render and fill in all the required variables (Token, API Key, Webhook URL, Webhook Secret, Database URL).
-5. Ensure your `TELEGRAM_WEBHOOK_URL` is set to `https://your-render-app-name.onrender.com`.
-
-### Testing Deployment
-Visit `https://your-render-app-name.onrender.com/health` in your browser. It should return `{"status": "ok", "version": "1.0.0"}`.
+Deploying to **Render** is easy:
+1. Push your code to GitHub.
+2. Use the `render.yaml` blueprint.
+3. Set your `TELEGRAM_WEBHOOK_URL` to your Render app URL.
+4. Ensure `APP_ENV=production` to enable the webhook.
 
 ---
-
-## Available Commands
-
-Interact with your bot on Telegram:
-
-- `/start` - Initialize your profile
-- `/help` - View command list
-- `/mode <mode>` - Change AI mode (assistant, coder, researcher, planner)
-- `/remember <fact>` - Save information
-- `/forget <keyword>` - Remove saved info
-- `/memory` - See what the bot remembers
-- `/note <text>` - Save a quick note
-- `/todo add <task>` - Add task
-- `/todo list` - View tasks
-- `/digest` - Get a summary of your day
-- `/code <prompt>` - Quick code generation
-
-Just paste a URL, and the bot will automatically try to read and summarize it!
+Built with ❤️ for a more productive AI-human collaboration.

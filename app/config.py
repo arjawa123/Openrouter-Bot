@@ -18,6 +18,17 @@ class Settings(BaseSettings):
     openrouter_site_url: str = ""
     openrouter_app_name: str = "TelegramOpenRouterBot"
     
+    # Groq Config
+    groq_api_key: SecretStr | None = None
+    groq_model_default: str = "llama-3.3-70b-versatile"
+    groq_model_code: str = "llama-3.3-70b-versatile"
+    
+    # LLM Routing Config
+    llm_primary_provider: str = "openrouter"
+    llm_fallback_provider: str = "groq"
+    llm_request_timeout: int = 30
+    llm_max_retries: int = 2
+    
     database_url: str
     log_level: str = "INFO"
     

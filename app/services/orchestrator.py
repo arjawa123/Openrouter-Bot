@@ -1,19 +1,12 @@
-import os
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.config import settings
-from app.db import crud
-from app.db.models import User
-from app.services.openrouter_client import openrouter_client
-from app.services.memory_service import get_memories_context
-from app.utils.urls import extract_urls
-from app.services.scraper_service import fetch_and_extract_content
+from loguru import logger
 
-def load_prompt(mode: str) -> str:
-    filepath = os.path.join("app", "prompts", f"{mode}.txt")
-    if os.path.exists(filepath):
-        with open(filepath, "r", encoding="utf-8") as f:
-            return f.read()
-    return "You are a helpful AI assistant."
+from app.db.models import User
+from app.services.intent_service import intent_service, Intent
+from app.services.assistant_service import assistant_service
+from app.services.todo_service import todo_service
+from app.services.notes_service import notes_service
+from app.services.memory_service import memory_service
 
 async def process_chat_message(
     db: AsyncSession, 
@@ -22,66 +15,57 @@ async def process_chat_message(
     user_input: str,
     mode_override: str = None
 ) -> str:
-    # 1. Determine mode and model
-    mode = mode_override or user.default_mode
-    model = user.default_model or settings.openrouter_model_default
-    
-    if mode == 'coder':
-        model = settings.openrouter_model_code
-    elif mode == 'researcher':
-        model = settings.openrouter_model_research
+    """
+    Enhanced orchestrator that detects intent and routes to the appropriate service.
+    """
+    # 1. Detect Intent
+    intent = await intent_service.detect_intent(user_input)
+    logger.info(f"Detected intent: {intent} for user {user.id}")
 
-    # 2. Check for URLs if in researcher mode or generally
-    urls = extract_urls(user_input)
-    scraped_context = ""
-    if urls:
-        extracted = await fetch_and_extract_content(urls[0]) # just do first URL for now
-        if not extracted.startswith("Error"):
-            scraped_context = f"\n\nContent from URL ({urls[0]}):\n{extracted}"
-            if not mode_override:
-                mode = 'researcher' # Auto-switch to researcher if URL is sent
-
-    # 3. Get system prompt template
-    sys_prompt_template = load_prompt(mode)
+    additional_context = ""
     
-    # 4. Get Memory Context
-    memory_context = await get_memories_context(db, user.id)
-    
-    # 5. Build full context
-    full_context = ""
-    if memory_context:
-        full_context += memory_context + "\n"
-    if scraped_context:
-        full_context += scraped_context
+    # 2. Proactive Routing & Action Execution
+    if intent == Intent.TASK_ADD:
+        task_data = await intent_service.extract_entity(intent, user_input)
+        content = task_data.get("content")
+        due_at_str = task_data.get("due_at")
         
-    # 6. Format system prompt
-    system_prompt = sys_prompt_template.format(
-        language=user.language,
-        preferred_name=user.preferred_name or user.first_name,
-        style=user.style,
-        context=full_context
+        due_at = None
+        if due_at_str:
+            from datetime import datetime
+            try:
+                # Handle various ISO formats from LLM
+                due_at = datetime.fromisoformat(due_at_str.replace("Z", "+00:00"))
+            except Exception as e:
+                logger.error(f"Failed to parse due_at '{due_at_str}': {e}")
+
+        await crud.create_todo(db, user.id, content, due_at=due_at)
+        
+        due_info = f" (due at {due_at_str})" if due_at_str else ""
+        additional_context = f"ACTION SUCCESS: I have added this task to your list: '{content}'{due_info}"
+        logger.info(f"Task added for user {user.id}: {content}{due_info}")
+        
+    elif intent == Intent.NOTE_ADD:
+        note_data = await intent_service.extract_entity(intent, user_input)
+        content = note_data.get("content")
+        await crud.create_note(db, user.id, content)
+        additional_context = f"ACTION SUCCESS: I have saved this note for you: '{content}'"
+        logger.info(f"Note added for user {user.id}: {content}")
+        
+    elif intent == Intent.REMEMBER:
+        memory_data = await intent_service.extract_entity(intent, user_input)
+        content = memory_data.get("content")
+        await crud.create_memory(db, user.id, content)
+        additional_context = f"ACTION SUCCESS: I have remembered this for you: '{content}'"
+        logger.info(f"Fact remembered for user {user.id}: {content}")
+
+    # 3. Use AssistantService for natural language interaction
+    # If an action was performed, the assistant will know via 'additional_context'
+    return await assistant_service.chat(
+        db=db,
+        user=user,
+        chat_id=chat_id,
+        user_input=user_input,
+        mode_override=mode_override,
+        additional_context=additional_context
     )
-
-    # 7. Get conversation history
-    conv = await crud.get_or_create_conversation(db, user.id, chat_id)
-    recent_msgs = await crud.get_recent_messages(db, conv.id, limit=6)
-    
-    # 8. Build OpenRouter messages payload
-    messages = [{"role": "system", "content": system_prompt}]
-    for msg in recent_msgs:
-        messages.append({"role": msg.role, "content": msg.content})
-    
-    # Add current user input
-    messages.append({"role": "user", "content": user_input})
-
-    # 9. Call OpenRouter
-    ai_response = await openrouter_client.chat_completion(
-        messages=messages,
-        model=model
-    )
-
-    # 10. Save to DB
-    await crud.create_message(db, conv.id, role="user", content=user_input)
-    await crud.create_message(db, conv.id, role="assistant", content=ai_response)
-
-    return ai_response

@@ -86,8 +86,8 @@ async def delete_memory_by_keyword(db: AsyncSession, user_id: int, keyword: str)
     return result.rowcount
 
 # --- Todos ---
-async def create_todo(db: AsyncSession, user_id: int, text: str) -> Todo:
-    todo = Todo(user_id=user_id, text=text)
+async def create_todo(db: AsyncSession, user_id: int, text: str, due_at: datetime = None) -> Todo:
+    todo = Todo(user_id=user_id, text=text, due_at=due_at)
     db.add(todo)
     await db.commit()
     return todo
@@ -109,8 +109,8 @@ async def mark_todo_done(db: AsyncSession, user_id: int, todo_id: int) -> bool:
     return result.rowcount > 0
 
 # --- Notes ---
-async def create_note(db: AsyncSession, user_id: int, content: str) -> Note:
-    note = Note(user_id=user_id, content=content)
+async def create_note(db: AsyncSession, user_id: int, content: str, title: str = None) -> Note:
+    note = Note(user_id=user_id, content=content, title=title)
     db.add(note)
     await db.commit()
     return note

@@ -75,6 +75,7 @@ class Todo(Base):
     text = Column(Text, nullable=False)
     status = Column(String, default="pending") # pending, done
     due_at = Column(DateTime(timezone=True), nullable=True)
+    is_notified = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", backref="todos")

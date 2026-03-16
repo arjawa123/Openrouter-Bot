@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from aiogram import Bot, Dispatcher
@@ -7,6 +8,7 @@ from app.config import settings
 from app.logging_config import setup_logging
 from app.api import health, webhook
 from app.bot import commands, handlers
+from app.services.reminder_service import reminder_worker
 from loguru import logger
 
 @asynccontextmanager
@@ -25,6 +27,9 @@ async def lifespan(app: FastAPI):
     
     app.state.bot = bot
     app.state.dp = dp
+    
+    # Start Background Services
+    reminder_task = asyncio.create_task(reminder_worker(bot))
     
     # Set Webhook
     if settings.app_env != "development" and settings.telegram_webhook_url:
