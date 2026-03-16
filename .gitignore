@@ -10,3 +10,4 @@ alembic.ini.bak
 .pytest_cache/
 .coverage
 htmlcov/
+.python-version
